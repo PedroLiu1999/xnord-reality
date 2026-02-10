@@ -95,10 +95,19 @@ You can customize the server settings by setting environment variables before ru
 | `SNI` | `www.microsoft.com` | The Server Name Indication (SNI) to mask traffic as. |
 | `SERVER_NAME` | `microsoft.com` | Expected server name in Client Hello. |
 | `IP` | *Auto-detected* | Manually override the public IP address in the share link. |
+| `AUTO_DEPLOY` | `false` | Set to `true` to automatically move the config and restart Xray (requires sudo). |
 
 **Example:**
 ```bash
 PORT=8443 SNI=www.google.com ./generate_config.sh
+```
+
+### Auto-Deploy
+
+You can skip the manual move/restart steps by running with `AUTO_DEPLOY=true` and `sudo`:
+
+```bash
+sudo AUTO_DEPLOY=true ./generate_config.sh
 ```
 
 ## Troubleshooting

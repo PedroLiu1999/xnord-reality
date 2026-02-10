@@ -186,6 +186,48 @@ echo "Detected IP: $IP"
 
 LINK="vless://$UUID@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Reality-Server"
 
+# Auto Deploy Feature
+if [ "$AUTO_DEPLOY" = "true" ]; then
+    echo "----------------------------------------"
+    echo "Auto Deploy Enabled"
+    TARGET_DIR="/usr/local/etc/xray"
+    TARGET_FILE="$TARGET_DIR/config.json"
+
+    # Check for root/sudo
+    if [ "$EUID" -ne 0 ]; then
+        echo "Error: Auto deploy requires root privileges. Please run with sudo."
+        echo "Try: sudo AUTO_DEPLOY=true ./generate_config.sh"
+    else
+        echo "Deploying to $TARGET_FILE..."
+        
+        # Ensure directory exists
+        if [ ! -d "$TARGET_DIR" ]; then
+            echo "Creating directory $TARGET_DIR..."
+            mkdir -p "$TARGET_DIR"
+        fi
+
+        # Backup existing config
+        if [ -f "$TARGET_FILE" ]; then
+            echo "Backing up existing config to $TARGET_FILE.bak..."
+            cp "$TARGET_FILE" "$TARGET_FILE.bak"
+        fi
+
+        # Move new config
+        echo "Installing new config..."
+        cp "$CONFIG_FILE" "$TARGET_FILE"
+
+        # Restart Service
+        echo "Restarting Xray service..."
+        if systemctl restart xray; then
+             echo "Xray service restarted successfully."
+             systemctl status xray --no-pager
+        else
+             echo "Error: Failed to restart Xray service. Check logs."
+        fi
+    fi
+     echo "----------------------------------------"
+fi
+
 echo ""
 echo "VLESS Share Link (Import this to your client):"
 echo "$LINK"
