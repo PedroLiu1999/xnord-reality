@@ -36,12 +36,6 @@ update_env() {
     local key=$1
     local val=$2
     if grep -q "^${key}=" "$ENV_FILE"; then
-        # Update existing (using sed with a temp file to avoid issues)
-        # sed -i is not portable, but we are on linux. standard sed usually works.
-        # escaping special chars in value is tricky. easier to delete and append?
-        # or use simple sed with | delimiter if value doesn't contain it.
-        # Private keys might have /, +, =.
-        # safe way: grep -v to remove old, then append new.
         grep -v "^${key}=" "$ENV_FILE" > "$ENV_FILE.tmp" && mv -f "$ENV_FILE.tmp" "$ENV_FILE"
     fi
     echo "${key}=${val}" >> "$ENV_FILE"
@@ -157,8 +151,7 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
         
         echo "  Country ID: $COUNTRY_ID. Fetching best WireGuard server..."
         
-        # Fetch best server: technology 35 (WireGuard), filter by country, limit 50 to sort by load locally if API sort isn't perfect
-        # API usually returns sorted by load if not specified, but let's be safe
+        # Fetch best server: technology 35 (WireGuard), filter by country, limit 1 to sort by load locally
         # API response is {"servers": [...]}, so we need to access .servers first
         SERVER_JSON=$(curl -s "https://api.nordvpn.com/v2/servers?limit=1&filters\[servers_technologies\]\[id\]=35&filters\[country_id\]=$COUNTRY_ID" | jq '.servers | sort_by(.load) | .[0]')
         
@@ -188,11 +181,8 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
         # Let's use a specific email mapping in the main inbound for simplicity
         
         # Append to Outbounds
-        # Note: endpoint is station IP : 51820 (default WG port, usually)
-        # Actually server response usually has endpoint port in technologies too?
-        # Let's assume 51820 for Nord WG or check metadata "port"
-        # Checking metadata again... id 35 metadata usually has public_key but not port? 
-        # Wait, let's check if port is available. Usually it is 51820.
+        # Append to Outbounds
+        # Note: endpoint is station IP : 51820 (default WG port)
         
         OUTBOUND_JSON=$(cat <<EOF
     {
@@ -213,9 +203,9 @@ EOF
         OUTBOUNDS_JSON="${OUTBOUNDS_JSON}${OUTBOUND_JSON}"
 
         # Append to Routing Rules
-        # We will route traffic based on a wrapper user or just use a specific inbound user email?
-        # Simpler approach: Map a specific user email to this tag.
-        # User email format: CODE (e.g., "US", "DE")
+        # Append to Routing Rules
+        # Map a specific user email to this tag.
+        # User email format: nord-CODE (e.g., "nord-US", "nord-DE")
         RULE_JSON=$(cat <<EOF
       {
         "type": "field",
@@ -230,10 +220,8 @@ EOF
         
         echo "  Added outbound $TAG and routing rule for user 'nord-$CODE'"
         
-        # Also print a VLESS link for this specific country
-        # Using the same IP/Port/Keys as main, but with a different client ID?
-        # To make "user" matching work in Xray, we need distinct emails (users) in the inbound.
-        # Construct specific share link later.
+        echo "  Added outbound $TAG and routing rule for user 'nord-$CODE'"
+        
     done
 fi
 
@@ -254,16 +242,8 @@ EOF
 # Add clients for VALID Nord countries
 if [ ${#VALID_NORD_COUNTRIES[@]} -gt 0 ]; then
     for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
-        # We need a predictable UUID for these clients so they are persistent?
-        # Only if we store them. For now, let's generate them or derive them?
-        # Generating fresh ones means links change every time script runs unless persisted.
-        # For Minimum Viable Product, let's just use the SAME UUID but different email.
-        # Xray VLESS distinction is by UUID. If UUID is same, email is ambiguous?
-        # No, Xray matches by ID. We need DISTINCT IDs for distinct routing if using "user" rule.
-        # Actually, Xray "user" rule matches the "email" field.
-        # BUT: VLESS inbounds match by UUID. Multiple clients can't share UUID?
-        # Actually they can't.
-        # SOLUTION: Generate a dedicated UUID for each country alias.
+    for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
+        # Generate a dedicated UUID for each country alias to ensure unique routing matching.
         
         # Load or Generate UUID for this country
         VAR_NAME="UUID_NORD_${CODE}"
@@ -471,15 +451,9 @@ if [ ${#VALID_NORD_COUNTRIES[@]} -gt 0 ]; then
         VAR_NAME="LINK_${CODE}"
         LINK_VAL=${!VAR_NAME}
         if [ -n "$LINK_VAL" ]; then
-             # Ensure IP is correct in the link (it was generated before IP detection moved down? No, need to move IP detection UP)
-             # Wait, IP detection was moved down in previous step replacement?
-             # I need to ensure IP detection happens BEFORE link generation.
-             # Actually, the previous step moved IP detection down to line 157, but Client generation happened at line ~100.
-             # So LINK_VAL has empty IP?
-             # Fix: I must move IP detection to the TOP of the script or correct the links here.
-             
-             # Correcting link IP here
-             LINK_VAL="${LINK_VAL//$IP_ADDRESS/$IP}" # Attempt replace? No, easier to just regenerate string
+        if [ -n "$LINK_VAL" ]; then
+             # Populate IP address
+             LINK_VAL="${LINK_VAL//$IP_ADDRESS/$IP}"
              VAR_UUID="UUID_NORD_${CODE}"
              UUID_VAL=${!VAR_UUID}
              LINK_VAL="vless://$UUID_VAL@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Nord-${CODE}"
