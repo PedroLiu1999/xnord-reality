@@ -11,6 +11,7 @@ A simple, robust shell script to generate Xray Reality configurations with persi
 
 ## Prerequisites
 
+- **Ubuntu/Debian** (Recommended for the installation script)
 - **Bash** (Standard on Linux/macOS)
 - **Curl**
 - **jq** (Required for NordVPN integration)
@@ -40,7 +41,17 @@ This script makes the following assumptions about your environment:
 
 ## Installation & Usage
 
-**Quick Start (Run without downloading):**
+**Quick Start (Fresh Ubuntu/Debian Server):**
+
+```bash
+# Install Xray, WireGuard, and dependencies, and open port 443
+curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/install.sh | sudo bash
+
+# Generate config and print link
+curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo bash
+```
+
+**Quick Start (Already installed dependencies):**
 
 ```bash
 # Generate config and print link
