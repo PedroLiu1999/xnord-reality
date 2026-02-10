@@ -159,7 +159,8 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
         
         # Fetch best server: technology 35 (WireGuard), filter by country, limit 50 to sort by load locally if API sort isn't perfect
         # API usually returns sorted by load if not specified, but let's be safe
-        SERVER_JSON=$(curl -s "https://api.nordvpn.com/v2/servers?limit=1&filters\[servers_technologies\]\[id\]=35&filters\[country_id\]=$COUNTRY_ID" | jq 'sort_by(.load) | .[0]')
+        # API response is {"servers": [...]}, so we need to access .servers first
+        SERVER_JSON=$(curl -s "https://api.nordvpn.com/v2/servers?limit=1&filters\[servers_technologies\]\[id\]=35&filters\[country_id\]=$COUNTRY_ID" | jq '.servers | sort_by(.load) | .[0]')
         
         if [ -z "$SERVER_JSON" ] || [ "$SERVER_JSON" == "null" ]; then
              echo "  No servers found for $CODE. Skipping."
