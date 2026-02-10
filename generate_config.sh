@@ -463,19 +463,40 @@ if [ "$AUTO_DEPLOY" = "true" ]; then
         if [ "$NORD_EXTERNAL_WG" = "true" ]; then
             echo "Managing external WireGuard interfaces..."
             
-            # 1. Bring down all existing wg-* interfaces
+            # 1. Bring down all existing wg-* interfaces to avoid conflicts during reconfiguration
+            # We use systemctl to stop them if they were previously enabled
             EXISTING_WGS=$(ip link show type wireguard | grep -oP '(?<=: )wg-[^:@]+' || true)
             for WG in $EXISTING_WGS; do
-                echo "  Deleting existing interface: $WG"
-                ip link delete "$WG" || echo "  Warning: Failed to delete interface $WG"
+                echo "  Stopping existing interface: $WG"
+                # Try to stop via systemd first
+                systemctl stop "wg-quick@$WG" 2>/dev/null || true
+                systemctl disable "wg-quick@$WG" 2>/dev/null || true
+                # Fallback to manual stop if systemd fails or wasn't used
+                ip link delete "$WG" 2>/dev/null || true
             done
 
-            # 2. Bring up newly generated interfaces
+            # 2. Deploy and Enable new interfaces
             for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
                 WG_CONF="wg-$CODE.conf"
+                WG_INTERFACE="wg-$CODE"
+                TARGET_WG_CONF="/etc/wireguard/$WG_INTERFACE.conf"
+                
                 if [ -f "$WG_CONF" ]; then
-                    echo "  Bringing up interface: wg-$CODE using $WG_CONF"
-                    wg-quick up "./$WG_CONF" || echo "  Error: Failed to bring up wg-$CODE"
+                    echo "  Deploying $WG_INTERFACE..."
+                    
+                    # Move config to /etc/wireguard/
+                    # Ensure /etc/wireguard exists
+                    mkdir -p /etc/wireguard
+                    cp "$WG_CONF" "$TARGET_WG_CONF"
+                    chmod 600 "$TARGET_WG_CONF"
+                    
+                    # Enable and Start via Systemd
+                    echo "  Enabling systemd service for $WG_INTERFACE..."
+                    if systemctl enable --now "wg-quick@$WG_INTERFACE"; then
+                        echo "  Successfully enabled and started $WG_INTERFACE"
+                    else
+                        echo "  Error: Failed to enable/start $WG_INTERFACE. Check 'systemctl status wg-quick@$WG_INTERFACE'"
+                    fi
                 fi
             done
         fi
@@ -489,12 +510,16 @@ if [ "$AUTO_DEPLOY" != "true" ]; then
     echo "Manual Setup Instructions"
     echo "========================================"
     echo ""
-    echo "1. Activate WireGuard Interfaces:"
+    echo "1. Activate WireGuard Interfaces (Persistent):"
     if [ "$NORD_EXTERNAL_WG" = "true" ]; then
         for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
-            echo "   sudo wg-quick up ./wg-$CODE.conf"
+            echo "   # Move config to /etc/wireguard/"
+            echo "   sudo cp wg-$CODE.conf /etc/wireguard/wg-$CODE.conf"
+            echo "   sudo chmod 600 /etc/wireguard/wg-$CODE.conf"
+            echo "   # Enable and start service"
+            echo "   sudo systemctl enable --now wg-quick@wg-$CODE"
         done
-        echo "   (Note: Config files are kept in the current directory)"
+        echo "   (Note: 'wg-quick@' is a standard systemd service for WireGuard)"
     else
         echo "   (Xray native WireGuard used, no system interfaces needed)"
     fi
