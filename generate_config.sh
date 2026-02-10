@@ -20,10 +20,47 @@ else
     XRAY_CMD="docker run --rm --entrypoint xray $XRAY_IMAGE"
 fi
 
-# Load existing environment variables
+# Load existing env
+# Capture CLI-provided variables before sourcing .env (so we can assert precedence and persist them)
+CLI_NORD_KEY="$NORD_WG_PRIVATE_KEY"
+CLI_NORD_COUNTRIES="$NORD_COUNTRIES"
+CLI_AUTO_DEPLOY="$AUTO_DEPLOY"
+
 if [ -f "$ENV_FILE" ]; then
     echo "Loading existing configuration from $ENV_FILE"
     source "$ENV_FILE"
+fi
+
+# Function to update or append variable in .env
+update_env() {
+    local key=$1
+    local val=$2
+    if grep -q "^${key}=" "$ENV_FILE"; then
+        # Update existing (using sed with a temp file to avoid issues)
+        # sed -i is not portable, but we are on linux. standard sed usually works.
+        # escaping special chars in value is tricky. easier to delete and append?
+        # or use simple sed with | delimiter if value doesn't contain it.
+        # Private keys might have /, +, =.
+        # safe way: grep -v to remove old, then append new.
+        grep -v "^${key}=" "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+    fi
+    echo "${key}=${val}" >> "$ENV_FILE"
+}
+
+# If CLI provided variables, overwrite and persist them
+if [ -n "$CLI_NORD_KEY" ]; then
+    NORD_WG_PRIVATE_KEY="$CLI_NORD_KEY"
+    update_env "NORD_WG_PRIVATE_KEY" "$NORD_WG_PRIVATE_KEY"
+fi
+
+if [ -n "$CLI_NORD_COUNTRIES" ]; then
+    NORD_COUNTRIES="$CLI_NORD_COUNTRIES"
+    update_env "NORD_COUNTRIES" "$NORD_COUNTRIES"
+fi
+
+if [ -n "$CLI_AUTO_DEPLOY" ]; then
+    AUTO_DEPLOY="$CLI_AUTO_DEPLOY"
+    update_env "AUTO_DEPLOY" "$AUTO_DEPLOY"
 fi
 
 # Generate missing variables
