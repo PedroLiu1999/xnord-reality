@@ -13,6 +13,8 @@ A simple, robust shell script to generate Xray Reality configurations with persi
 
 - **Bash** (Standard on Linux/macOS)
 - **Curl**
+- **jq** (Required for NordVPN integration)
+- **wireguard-tools** (Required for `NORD_EXTERNAL_WG`)
 - **One of the following for Key Generation**:
     - `xray` binary in your PATH.
     - `docker` (script will pull and run the Xray image).
@@ -39,15 +41,25 @@ This script makes the following assumptions about your environment:
 ## Installation & Usage
 
 **Quick Start (Run without downloading):**
+
 ```bash
 # Generate config and print link
-curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | bash
+curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo bash
+```
 
-# OR: Generate and Auto-Deploy (requires sudo)
+```bash
+# Generate and Auto-Deploy (requires sudo)
 curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo AUTO_DEPLOY=true bash
+```
 
-# OR: Generate with NordVPN Integration (requires NordVPN Private Key)
+```bash
+# Generate with NordVPN Integration (requires NordVPN Private Key)
 curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo NORD_WG_PRIVATE_KEY="your_key" NORD_COUNTRIES="US,DE" AUTO_DEPLOY=true bash
+```
+
+```bash
+# Generate with External WireGuard Routing (requires wireguard-tools)
+curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo NORD_WG_PRIVATE_KEY="your_key" NORD_COUNTRIES="US,DE" NORD_EXTERNAL_WG=true AUTO_DEPLOY=true bash
 ```
 
 **Manual Installation:**
@@ -105,6 +117,7 @@ You can customize the server settings by setting environment variables before ru
 | `AUTO_DEPLOY` | `false` | Set to `true` to automatically move the config and restart Xray (requires sudo). |
 | `NORD_WG_PRIVATE_KEY` | *None* | Your NordVPN WireGuard Private Key. Required for NordVPN integration. |
 | `NORD_COUNTRIES` | *None* | Comma-separated list of 2-letter country codes (e.g., `US,DE,JP`) to generate outbounds for. |
+| `NORD_EXTERNAL_WG` | `false` | Set to `true` to use system WireGuard (`wg-quick`) instead of Xray's native implementation. |
 
 **Example:**
 ```bash
@@ -130,6 +143,15 @@ sudo NORD_WG_PRIVATE_KEY="your_private_key" NORD_COUNTRIES="US,DE,JP" AUTO_DEPLO
 - This will create a separate outbound and VLESS user for each country.
 - You will get a unique share link for each country (e.g., `Nord-US`, `Nord-DE`).
 - These settings are **persisted** to `.xray.env`, so you don't need to type them on subsequent runs.
+
+### External WireGuard Mode
+
+If you set `NORD_EXTERNAL_WG=true`, the script will:
+1. Generate `wg-{code}.conf` files for each country.
+2. Use Xray's `freedom` protocol to route traffic through these interfaces.
+3. Automatically manage the interfaces (down/up) if `AUTO_DEPLOY=true` is set.
+
+This mode is recommended for better performance and when you need the WireGuard interfaces to be visible to the system.
 
 
 ## Troubleshooting

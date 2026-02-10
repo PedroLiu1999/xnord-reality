@@ -20,11 +20,19 @@ else
     XRAY_CMD="docker run --rm --entrypoint xray $XRAY_IMAGE"
 fi
 
+# Detect jq command
+if ! command -v jq &> /dev/null; then
+    echo "Error: 'jq' is not installed. It is required for NordVPN integration."
+    echo "Please install it (e.g., sudo apt install jq)."
+    exit 1
+fi
+
 # Load existing env
 # Capture CLI-provided variables before sourcing .env (so we can assert precedence and persist them)
 CLI_NORD_KEY="$NORD_WG_PRIVATE_KEY"
 CLI_NORD_COUNTRIES="$NORD_COUNTRIES"
 CLI_AUTO_DEPLOY="$AUTO_DEPLOY"
+CLI_NORD_EXTERNAL_WG="$NORD_EXTERNAL_WG"
 
 if [ -f "$ENV_FILE" ]; then
     echo "Loading existing configuration from $ENV_FILE"
@@ -55,6 +63,11 @@ fi
 if [ -n "$CLI_AUTO_DEPLOY" ]; then
     AUTO_DEPLOY="$CLI_AUTO_DEPLOY"
     update_env "AUTO_DEPLOY" "$AUTO_DEPLOY"
+fi
+
+if [ -n "$CLI_NORD_EXTERNAL_WG" ]; then
+    NORD_EXTERNAL_WG="$CLI_NORD_EXTERNAL_WG"
+    update_env "NORD_EXTERNAL_WG" "$NORD_EXTERNAL_WG"
 fi
 
 # Generate missing variables
@@ -108,6 +121,7 @@ SHORT_ID=$SHORT_ID
 PORT=$PORT
 SNI=$SNI
 SERVER_NAME=$SERVER_NAME
+NORD_EXTERNAL_WG=$NORD_EXTERNAL_WG
 EOF
 fi
 
@@ -137,11 +151,11 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
     VALID_NORD_COUNTRIES=()
 
     for CODE in "${COUNTRY_CODES[@]}"; do
-        # Trim whitespace
-        CODE=$(echo "$CODE" | xargs)
+        # Trim whitespace and normalize to uppercase
+        CODE=$(echo "$CODE" | xargs | tr '[:lower:]' '[:upper:]')
         echo "Processing country: $CODE"
         
-        # Find Country ID (case-insensitive search)
+        # Find Country ID
         COUNTRY_ID=$(echo "$COUNTRIES_JSON" | jq -r --arg CODE "$CODE" '.[] | select(.code == $CODE) | .id')
         
         if [ -z "$COUNTRY_ID" ] || [ "$COUNTRY_ID" == "null" ]; then
@@ -181,10 +195,38 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
         # Let's use a specific email mapping in the main inbound for simplicity
         
         # Append to Outbounds
-        # Append to Outbounds
         # Note: endpoint is station IP : 51820 (default WG port)
         
-        OUTBOUND_JSON=$(cat <<EOF
+        if [ "$NORD_EXTERNAL_WG" = "true" ]; then
+            WG_INTERFACE="wg-$CODE"
+            OUTBOUND_JSON=$(cat <<EOF
+    {
+      "tag": "$TAG",
+      "protocol": "freedom",
+      "settings": {},
+      "streamSettings": {
+        "sockopt": {
+          "interface": "$WG_INTERFACE"
+        }
+      }
+    },
+EOF
+)
+            # Generate external WG config
+            WG_CONF_FILE="wg-$CODE.conf"
+            echo "  Generating external WG config: $WG_CONF_FILE"
+            cat > "$WG_CONF_FILE" <<EOF
+[Interface]
+PrivateKey = $NORD_WG_PRIVATE_KEY
+Address = 10.5.0.2/32
+
+[Peer]
+PublicKey = $PUB_KEY
+Endpoint = $STATION:51820
+AllowedIPs = 0.0.0.0/0
+EOF
+        else
+            OUTBOUND_JSON=$(cat <<EOF
     {
       "tag": "$TAG",
       "protocol": "wireguard",
@@ -201,6 +243,7 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
     },
 EOF
 )
+        fi
         OUTBOUNDS_JSON="${OUTBOUNDS_JSON}${OUTBOUND_JSON}"
 
         # Append to Routing Rules
@@ -415,6 +458,27 @@ if [ "$AUTO_DEPLOY" = "true" ]; then
              systemctl status xray --no-pager
         else
              echo "Error: Failed to restart Xray service. Check logs."
+        fi
+
+        # External WireGuard Management
+        if [ "$NORD_EXTERNAL_WG" = "true" ]; then
+            echo "Managing external WireGuard interfaces..."
+            
+            # 1. Bring down all existing wg-* interfaces
+            EXISTING_WGS=$(ip link show type wireguard | grep -oP '(?<=: )wg-[^:@]+' || true)
+            for WG in $EXISTING_WGS; do
+                echo "  Bringing down existing interface: $WG"
+                wg-quick down "$WG" || echo "  Warning: Failed to bring down $WG"
+            done
+
+            # 2. Bring up newly generated interfaces
+            for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
+                WG_CONF="wg-$CODE.conf"
+                if [ -f "$WG_CONF" ]; then
+                    echo "  Bringing up interface: wg-$CODE using $WG_CONF"
+                    wg-quick up "./$WG_CONF" || echo "  Error: Failed to bring up wg-$CODE"
+                fi
+            done
         fi
     fi
      echo "----------------------------------------"
