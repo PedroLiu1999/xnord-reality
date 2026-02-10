@@ -190,6 +190,7 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
       "protocol": "wireguard",
       "settings": {
         "secretKey": "$NORD_WG_PRIVATE_KEY",
+        "address": ["10.5.0.2/32"],
         "peers": [
           {
             "publicKey": "$PUB_KEY",
