@@ -40,7 +40,11 @@ This script makes the following assumptions about your environment:
 
 **Quick Start (Run without downloading):**
 ```bash
+# Generate config and print link
 bash <(curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh)
+
+# OR: Generate and Auto-Deploy (requires sudo)
+sudo AUTO_DEPLOY=true bash <(curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh)
 ```
 
 **Manual Installation:**
