@@ -468,8 +468,8 @@ if [ "$AUTO_DEPLOY" = "true" ]; then
             # 1. Bring down all existing wg-* interfaces
             EXISTING_WGS=$(ip link show type wireguard | grep -oP '(?<=: )wg-[^:@]+' || true)
             for WG in $EXISTING_WGS; do
-                echo "  Bringing down existing interface: $WG"
-                wg-quick down "$WG" || echo "  Warning: Failed to bring down $WG"
+                echo "  Deleting existing interface: $WG"
+                ip link delete "$WG" || echo "  Warning: Failed to delete interface $WG"
             done
 
             # 2. Bring up newly generated interfaces
@@ -496,6 +496,7 @@ if [ "$AUTO_DEPLOY" != "true" ]; then
         for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
             echo "   sudo wg-quick up ./wg-$CODE.conf"
         done
+        echo "   (Note: Config files are kept in the current directory)"
     else
         echo "   (Xray native WireGuard used, no system interfaces needed)"
     fi
