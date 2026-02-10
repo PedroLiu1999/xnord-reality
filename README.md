@@ -38,6 +38,13 @@ This script makes the following assumptions about your environment:
 
 ## Installation & Usage
 
+**Quick Start (Run without downloading):**
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh)
+```
+
+**Manual Installation:**
+
 1.  **Clone the repository** (or download the script):
     ```bash
     git clone https://github.com/PedroLiu1999/xnord-reality
