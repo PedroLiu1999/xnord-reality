@@ -240,6 +240,9 @@ if [ -n "$NORD_COUNTRIES" ]; then
             EXISTING_ID=$NEW_ID
         fi
         
+        # Export variable for later use (Fix for empty UUID in printing loop)
+        export "$VAR_NAME"="$EXISTING_ID"
+        
         CLIENT_JSON=$(cat <<EOF
 ,
           {
