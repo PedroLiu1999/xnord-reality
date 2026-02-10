@@ -65,6 +65,24 @@ bash <(curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/mas
     - Import the VLESS share link printed at the end of the output into your client (v2rayN, Nekoray, shadowrocket, etc.).
     - Or scan the QR code if available.
 
+5.  **Activate Configuration** (Standard Installation):
+
+    Move the generated file to your Xray configuration directory and restart the service.
+
+    ```bash
+    # Backup existing config
+    sudo cp /usr/local/etc/xray/config.json /usr/local/etc/xray/config.json.bak
+    
+    # Move new config
+    sudo mv config.json /usr/local/etc/xray/config.json
+    
+    # Restart Xray service
+    sudo systemctl restart xray
+    
+    # Check status
+    sudo systemctl status xray
+    ```
+
 ## Configuration
 
 You can customize the server settings by setting environment variables before running the script or by editing the `.xray.env` file.
