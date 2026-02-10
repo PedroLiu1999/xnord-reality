@@ -264,9 +264,7 @@ EOF
         ROUTING_RULES_JSON="${ROUTING_RULES_JSON}${RULE_JSON}"
         
         echo "  Added outbound $TAG and routing rule for user 'nord-$CODE'"
-        
-        echo "  Added outbound $TAG and routing rule for user 'nord-$CODE'"
-        
+                
     done
 fi
 
