@@ -42,7 +42,7 @@ update_env() {
         # or use simple sed with | delimiter if value doesn't contain it.
         # Private keys might have /, +, =.
         # safe way: grep -v to remove old, then append new.
-        grep -v "^${key}=" "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+        grep -v "^${key}=" "$ENV_FILE" > "$ENV_FILE.tmp" && mv -f "$ENV_FILE.tmp" "$ENV_FILE"
     fi
     echo "${key}=${val}" >> "$ENV_FILE"
 }
@@ -140,6 +140,7 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
     # Initialize JSON arrays if they are empty
     OUTBOUNDS_JSON=""
     ROUTING_RULES_JSON=""
+    VALID_NORD_COUNTRIES=()
 
     for CODE in "${COUNTRY_CODES[@]}"; do
         # Trim whitespace
@@ -176,6 +177,9 @@ if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
         fi
 
         echo "  Selected: $HOSTNAME ($STATION) - Load: $(echo "$SERVER_JSON" | jq -r '.load')%"
+
+        # Add to valid list
+        VALID_NORD_COUNTRIES+=("$CODE")
 
         # Generate unique tag and client ID for this country
         TAG="nord-$CODE"
@@ -246,11 +250,9 @@ CLIENTS_JSON=$(cat <<EOF
 EOF
 )
 
-# Add clients for Nord countries
-if [ -n "$NORD_COUNTRIES" ]; then
-    IFS=',' read -ra COUNTRY_CODES <<< "$NORD_COUNTRIES"
-    for CODE in "${COUNTRY_CODES[@]}"; do
-        CODE=$(echo "$CODE" | xargs)
+# Add clients for VALID Nord countries
+if [ ${#VALID_NORD_COUNTRIES[@]} -gt 0 ]; then
+    for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
         # We need a predictable UUID for these clients so they are persistent?
         # Only if we store them. For now, let's generate them or derive them?
         # Generating fresh ones means links change every time script runs unless persisted.
@@ -462,10 +464,8 @@ LINK="vless://$UUID@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&h
 print_link "Reality Direct (No VPN)" "$LINK"
 
 # 2. NordVPN Links
-if [ -n "$NORD_COUNTRIES" ]; then
-    IFS=',' read -ra COUNTRY_CODES <<< "$NORD_COUNTRIES"
-    for CODE in "${COUNTRY_CODES[@]}"; do
-        CODE=$(echo "$CODE" | xargs)
+if [ ${#VALID_NORD_COUNTRIES[@]} -gt 0 ]; then
+    for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
         # Reconstruct variable name for link
         VAR_NAME="LINK_${CODE}"
         LINK_VAL=${!VAR_NAME}
