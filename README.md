@@ -160,7 +160,9 @@ sudo NORD_WG_PRIVATE_KEY="your_private_key" NORD_COUNTRIES="US,DE,JP" AUTO_DEPLO
 If you set `NORD_EXTERNAL_WG=true`, the script will:
 1. Generate `wg-{code}.conf` files for each country.
 2. Use Xray's `freedom` protocol to route traffic through these interfaces.
-3. Automatically manage the interfaces (down/up) if `AUTO_DEPLOY=true` is set.
+3. **Automatically deploy as systemd services** if `AUTO_DEPLOY=true`:
+    - Moves configs to `/etc/wireguard/`.
+    - Enables and starts `wg-quick@wg-{code}` services for persistence across reboots.
 
 This mode is recommended for better performance and when you need the WireGuard interfaces to be visible to the system.
 
