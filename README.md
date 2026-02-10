@@ -45,6 +45,9 @@ curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/gen
 
 # OR: Generate and Auto-Deploy (requires sudo)
 curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo AUTO_DEPLOY=true bash
+
+# OR: Generate with NordVPN Integration (requires NordVPN Private Key)
+curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo NORD_WG_PRIVATE_KEY="your_key" NORD_COUNTRIES="US,DE" AUTO_DEPLOY=true bash
 ```
 
 **Manual Installation:**
@@ -121,11 +124,12 @@ sudo AUTO_DEPLOY=true ./generate_config.sh
 You can route traffic through NordVPN servers by providing your WireGuard Private Key and a list of countries.
 
 ```bash
-NORD_WG_PRIVATE_KEY="your_private_key" NORD_COUNTRIES="US,DE,JP" ./generate_config.sh
+sudo NORD_WG_PRIVATE_KEY="your_private_key" NORD_COUNTRIES="US,DE,JP" AUTO_DEPLOY=true ./generate_config.sh
 ```
 
 - This will create a separate outbound and VLESS user for each country.
 - You will get a unique share link for each country (e.g., `Nord-US`, `Nord-DE`).
+- These settings are **persisted** to `.xray.env`, so you don't need to type them on subsequent runs.
 
 
 ## Troubleshooting
