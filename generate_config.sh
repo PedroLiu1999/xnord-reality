@@ -219,6 +219,7 @@ EOF
 [Interface]
 PrivateKey = $NORD_WG_PRIVATE_KEY
 Address = 10.5.0.2/32
+Table = off
 
 [Peer]
 PublicKey = $PUB_KEY
