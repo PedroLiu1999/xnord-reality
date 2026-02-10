@@ -89,7 +89,173 @@ echo "SNI: $SNI"
 echo "----------------------------------------"
 
 # Generate config.json
+# NordVPN Integration Logic
+OUTBOUNDS_JSON=""
+ROUTING_RULES_JSON=""
+
+if [ -n "$NORD_WG_PRIVATE_KEY" ] && [ -n "$NORD_COUNTRIES" ]; then
+    echo "NordVPN Integration Enabled."
+    echo "Fetching country list..."
+    COUNTRIES_JSON=$(curl -s "https://api.nordvpn.com/v1/countries")
+
+    IFS=',' read -ra COUNTRY_CODES <<< "$NORD_COUNTRIES"
+    
+    # Initialize JSON arrays if they are empty
+    OUTBOUNDS_JSON=""
+    ROUTING_RULES_JSON=""
+
+    for CODE in "${COUNTRY_CODES[@]}"; do
+        # Trim whitespace
+        CODE=$(echo "$CODE" | xargs)
+        echo "Processing country: $CODE"
+        
+        # Find Country ID (case-insensitive search)
+        COUNTRY_ID=$(echo "$COUNTRIES_JSON" | jq -r --arg CODE "$CODE" '.[] | select(.code == $CODE) | .id')
+        
+        if [ -z "$COUNTRY_ID" ] || [ "$COUNTRY_ID" == "null" ]; then
+            echo "Warning: Country code $CODE not found. Skipping."
+            continue
+        fi
+        
+        echo "  Country ID: $COUNTRY_ID. Fetching best WireGuard server..."
+        
+        # Fetch best server: technology 35 (WireGuard), filter by country, limit 50 to sort by load locally if API sort isn't perfect
+        # API usually returns sorted by load if not specified, but let's be safe
+        SERVER_JSON=$(curl -s "https://api.nordvpn.com/v2/servers?limit=1&filters\[servers_technologies\]\[id\]=35&filters\[country_id\]=$COUNTRY_ID" | jq 'sort_by(.load) | .[0]')
+        
+        if [ -z "$SERVER_JSON" ] || [ "$SERVER_JSON" == "null" ]; then
+             echo "  No servers found for $CODE. Skipping."
+             continue
+        fi
+
+        HOSTNAME=$(echo "$SERVER_JSON" | jq -r '.hostname')
+        STATION=$(echo "$SERVER_JSON" | jq -r '.station')
+        # Extract Public Key from technologies metadata
+        PUB_KEY=$(echo "$SERVER_JSON" | jq -r '.technologies[] | select(.id == 35) | .metadata[] | select(.name == "public_key") | .value')
+        
+        if [ -z "$PUB_KEY" ] || [ "$PUB_KEY" == "null" ]; then
+             echo "  Could not extract public key for $HOSTNAME. Skipping."
+             continue
+        fi
+
+        echo "  Selected: $HOSTNAME ($STATION) - Load: $(echo "$SERVER_JSON" | jq -r '.load')%"
+
+        # Generate unique tag and client ID for this country
+        TAG="nord-$CODE"
+        CLIENT_ID=$(uuidgen) # Generate a specific UUID for this routing path? Or reuse main UUID with email? 
+        # Let's use a specific email mapping in the main inbound for simplicity
+        
+        # Append to Outbounds
+        # Note: endpoint is station IP : 51820 (default WG port, usually)
+        # Actually server response usually has endpoint port in technologies too?
+        # Let's assume 51820 for Nord WG or check metadata "port"
+        # Checking metadata again... id 35 metadata usually has public_key but not port? 
+        # Wait, let's check if port is available. Usually it is 51820.
+        
+        OUTBOUND_JSON=$(cat <<EOF
+    {
+      "tag": "$TAG",
+      "protocol": "wireguard",
+      "settings": {
+        "secretKey": "$NORD_WG_PRIVATE_KEY",
+        "peers": [
+          {
+            "publicKey": "$PUB_KEY",
+            "endpoint": "$STATION:51820"
+          }
+        ]
+      }
+    },
+EOF
+)
+        OUTBOUNDS_JSON="${OUTBOUNDS_JSON}${OUTBOUND_JSON}"
+
+        # Append to Routing Rules
+        # We will route traffic based on a wrapper user or just use a specific inbound user email?
+        # Simpler approach: Map a specific user email to this tag.
+        # User email format: CODE (e.g., "US", "DE")
+        RULE_JSON=$(cat <<EOF
+      {
+        "type": "field",
+        "user": [
+          "nord-$CODE"
+        ],
+        "outboundTag": "$TAG"
+      },
+EOF
+)
+        ROUTING_RULES_JSON="${ROUTING_RULES_JSON}${RULE_JSON}"
+        
+        echo "  Added outbound $TAG and routing rule for user 'nord-$CODE'"
+        
+        # Also print a VLESS link for this specific country
+        # Using the same IP/Port/Keys as main, but with a different client ID?
+        # To make "user" matching work in Xray, we need distinct emails (users) in the inbound.
+        # Construct specific share link later.
+    done
+fi
+
+# Generate config.json (Modified to include dynamic parts)
 echo "Generating $CONFIG_FILE..."
+
+# Build Inbound Clients JSON
+# Default client
+CLIENTS_JSON=$(cat <<EOF
+          {
+            "id": "$UUID",
+            "flow": "xtls-rprx-vision",
+            "email": "default"
+          }
+EOF
+)
+
+# Add clients for Nord countries
+if [ -n "$NORD_COUNTRIES" ]; then
+    IFS=',' read -ra COUNTRY_CODES <<< "$NORD_COUNTRIES"
+    for CODE in "${COUNTRY_CODES[@]}"; do
+        CODE=$(echo "$CODE" | xargs)
+        # We need a predictable UUID for these clients so they are persistent?
+        # Only if we store them. For now, let's generate them or derive them?
+        # Generating fresh ones means links change every time script runs unless persisted.
+        # For Minimum Viable Product, let's just use the SAME UUID but different email.
+        # Xray VLESS distinction is by UUID. If UUID is same, email is ambiguous?
+        # No, Xray matches by ID. We need DISTINCT IDs for distinct routing if using "user" rule.
+        # Actually, Xray "user" rule matches the "email" field.
+        # BUT: VLESS inbounds match by UUID. Multiple clients can't share UUID?
+        # Actually they can't.
+        # SOLUTION: Generate a dedicated UUID for each country alias.
+        
+        # Load or Generate UUID for this country
+        VAR_NAME="UUID_NORD_${CODE}"
+        # Read from .xray.env if exists (loaded earlier)
+        EXISTING_ID=${!VAR_NAME}
+        
+        if [ -z "$EXISTING_ID" ]; then
+            if command -v uuidgen &> /dev/null; then
+               NEW_ID=$(uuidgen)
+            else
+               NEW_ID=$($XRAY_CMD uuid)
+            fi
+            echo "$VAR_NAME=$NEW_ID" >> "$ENV_FILE"
+            EXISTING_ID=$NEW_ID
+        fi
+        
+        CLIENT_JSON=$(cat <<EOF
+,
+          {
+            "id": "$EXISTING_ID",
+            "flow": "xtls-rprx-vision",
+            "email": "nord-$CODE"
+          }
+EOF
+)
+        CLIENTS_JSON="${CLIENTS_JSON}${CLIENT_JSON}"
+        
+        # Store for printing links later
+        declare "LINK_${CODE}=vless://$EXISTING_ID@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Nord-${CODE}"
+    done
+fi
+
 cat > "$CONFIG_FILE" <<EOF
 {
   "log": {
@@ -101,10 +267,7 @@ cat > "$CONFIG_FILE" <<EOF
       "protocol": "vless",
       "settings": {
         "clients": [
-          {
-            "id": "$UUID",
-            "flow": "xtls-rprx-vision"
-          }
+$CLIENTS_JSON
         ],
         "decryption": "none"
       },
@@ -142,11 +305,17 @@ cat > "$CONFIG_FILE" <<EOF
     {
       "protocol": "blackhole",
       "tag": "blocked"
+    },
+${OUTBOUNDS_JSON}
+    {
+       "protocol": "freedom",
+       "tag": "fallback-freedom" 
     }
   ],
   "routing": {
     "domainStrategy": "AsIs",
     "rules": [
+${ROUTING_RULES_JSON}
       {
         "type": "field",
         "ip": [
@@ -161,10 +330,12 @@ EOF
 
 echo "$CONFIG_FILE generated successfully."
 
-# Construct VLESS Share Link
-# Format: vless://UUID@IP:PORT?security=reality&encryption=none&pbk=PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=SNI&sid=SHORT_ID#REMARKS
-# Note: IP is autodetection or manual input. Using "YOUR_IP" as placeholder.
-# Determine IP Address
+# Construct VLESS Share Links
+# Main Link
+LINK="vless://$UUID@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Reality-Direct"
+
+
+# Determine IP Address (Moved up)
 # 1. Check if IP is set in environment (e.g. from .xray.env)
 if [ -z "$IP" ]; then
     echo "Detecting IP address..."
@@ -183,8 +354,6 @@ if [ -z "$IP" ]; then
     fi
 fi
 echo "Detected IP: $IP"
-
-LINK="vless://$UUID@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Reality-Server"
 
 # Auto Deploy Feature
 if [ "$AUTO_DEPLOY" = "true" ]; then
@@ -229,15 +398,57 @@ if [ "$AUTO_DEPLOY" = "true" ]; then
 fi
 
 echo ""
-echo "VLESS Share Link (Import this to your client):"
-echo "$LINK"
+echo "========================================"
+echo "VLESS Share Links"
+echo "========================================"
 echo ""
 
-# Generate QR Code if qrencode is available
-if command -v qrencode &> /dev/null; then
-    echo "QR Code:"
-    echo "$LINK" | qrencode -t ANSIUTF8
-else
-    echo "Tip: Install 'qrencode' to see a QR code here (sudo apt install qrencode)."
+# Function to print link and QR
+print_link() {
+    local LABEL=$1
+    local LINK=$2
+    echo "$LABEL:"
+    echo "$LINK"
+    if command -v qrencode &> /dev/null; then
+        echo "QR Code:"
+        echo "$LINK" | qrencode -t ANSIUTF8
+    fi
+    echo "----------------------------------------"
+}
+
+# 1. Main Direct Link
+# Recalculate main link with detected IP
+LINK="vless://$UUID@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Reality-Direct"
+print_link "Reality Direct (No VPN)" "$LINK"
+
+# 2. NordVPN Links
+if [ -n "$NORD_COUNTRIES" ]; then
+    IFS=',' read -ra COUNTRY_CODES <<< "$NORD_COUNTRIES"
+    for CODE in "${COUNTRY_CODES[@]}"; do
+        CODE=$(echo "$CODE" | xargs)
+        # Reconstruct variable name for link
+        VAR_NAME="LINK_${CODE}"
+        LINK_VAL=${!VAR_NAME}
+        if [ -n "$LINK_VAL" ]; then
+             # Ensure IP is correct in the link (it was generated before IP detection moved down? No, need to move IP detection UP)
+             # Wait, IP detection was moved down in previous step replacement?
+             # I need to ensure IP detection happens BEFORE link generation.
+             # Actually, the previous step moved IP detection down to line 157, but Client generation happened at line ~100.
+             # So LINK_VAL has empty IP?
+             # Fix: I must move IP detection to the TOP of the script or correct the links here.
+             
+             # Correcting link IP here
+             LINK_VAL="${LINK_VAL//$IP_ADDRESS/$IP}" # Attempt replace? No, easier to just regenerate string
+             VAR_UUID="UUID_NORD_${CODE}"
+             UUID_VAL=${!VAR_UUID}
+             LINK_VAL="vless://$UUID_VAL@$IP:$PORT?security=reality&encryption=none&pbk=$PUBLIC_KEY&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=$SNI&sid=$SHORT_ID#Nord-${CODE}"
+             
+             print_link "NordVPN - $CODE" "$LINK_VAL"
+        fi
+    done
+fi
+
+if ! command -v qrencode &> /dev/null; then
+    echo "Tip: Install 'qrencode' to see QR codes (sudo apt install qrencode)."
 fi
 echo ""

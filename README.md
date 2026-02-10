@@ -100,6 +100,8 @@ You can customize the server settings by setting environment variables before ru
 | `SERVER_NAME` | `microsoft.com` | Expected server name in Client Hello. |
 | `IP` | *Auto-detected* | Manually override the public IP address in the share link. |
 | `AUTO_DEPLOY` | `false` | Set to `true` to automatically move the config and restart Xray (requires sudo). |
+| `NORD_WG_PRIVATE_KEY` | *None* | Your NordVPN WireGuard Private Key. Required for NordVPN integration. |
+| `NORD_COUNTRIES` | *None* | Comma-separated list of 2-letter country codes (e.g., `US,DE,JP`) to generate outbounds for. |
 
 **Example:**
 ```bash
@@ -113,6 +115,18 @@ You can skip the manual move/restart steps by running with `AUTO_DEPLOY=true` an
 ```bash
 sudo AUTO_DEPLOY=true ./generate_config.sh
 ```
+
+### NordVPN Integration
+
+You can route traffic through NordVPN servers by providing your WireGuard Private Key and a list of countries.
+
+```bash
+NORD_WG_PRIVATE_KEY="your_private_key" NORD_COUNTRIES="US,DE,JP" ./generate_config.sh
+```
+
+- This will create a separate outbound and VLESS user for each country.
+- You will get a unique share link for each country (e.g., `Nord-US`, `Nord-DE`).
+
 
 ## Troubleshooting
 
