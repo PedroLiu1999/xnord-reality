@@ -242,7 +242,6 @@ EOF
 # Add clients for VALID Nord countries
 if [ ${#VALID_NORD_COUNTRIES[@]} -gt 0 ]; then
     for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
-    for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
         # Generate a dedicated UUID for each country alias to ensure unique routing matching.
         
         # Load or Generate UUID for this country
@@ -450,7 +449,6 @@ if [ ${#VALID_NORD_COUNTRIES[@]} -gt 0 ]; then
         # Reconstruct variable name for link
         VAR_NAME="LINK_${CODE}"
         LINK_VAL=${!VAR_NAME}
-        if [ -n "$LINK_VAL" ]; then
         if [ -n "$LINK_VAL" ]; then
              # Populate IP address
              LINK_VAL="${LINK_VAL//$IP_ADDRESS/$IP}"
