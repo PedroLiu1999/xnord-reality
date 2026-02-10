@@ -48,7 +48,7 @@ This script makes the following assumptions about your environment:
 curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/install.sh | sudo bash
 
 # Generate config and print link
-curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo bash
+curl -sL https://raw.githubusercontent.com/PedroLiu1999/xnord-reality/master/generate_config.sh | sudo AUTO_DEPLOY=true bash
 ```
 
 **Quick Start (Already installed dependencies):**
