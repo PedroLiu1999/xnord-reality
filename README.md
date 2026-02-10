@@ -40,7 +40,7 @@ This script makes the following assumptions about your environment:
 
 1.  **Clone the repository** (or download the script):
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/PedroLiu1999/xnord-reality
     cd xnord-reality
     ```
 
