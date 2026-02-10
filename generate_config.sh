@@ -484,6 +484,27 @@ if [ "$AUTO_DEPLOY" = "true" ]; then
      echo "----------------------------------------"
 fi
 
+if [ "$AUTO_DEPLOY" != "true" ]; then
+    echo ""
+    echo "========================================"
+    echo "Manual Setup Instructions"
+    echo "========================================"
+    echo ""
+    echo "1. Activate WireGuard Interfaces:"
+    if [ "$NORD_EXTERNAL_WG" = "true" ]; then
+        for CODE in "${VALID_NORD_COUNTRIES[@]}"; do
+            echo "   sudo wg-quick up ./wg-$CODE.conf"
+        done
+    else
+        echo "   (Xray native WireGuard used, no system interfaces needed)"
+    fi
+    echo ""
+    echo "2. Install Xray Configuration:"
+    echo "   sudo cp $CONFIG_FILE /usr/local/etc/xray/config.json"
+    echo "   sudo systemctl restart xray"
+    echo ""
+fi
+
 echo ""
 echo "========================================"
 echo "VLESS Share Links"
